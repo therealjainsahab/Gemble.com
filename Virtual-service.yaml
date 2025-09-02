@@ -1,0 +1,45 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: betting-platform
+  namespace: production
+spec:
+  hosts:
+  - "api.betting-platform.com"
+  - "www.betting-platform.com"
+  gateways:
+  - betting-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/api/"
+    route:
+    - destination:
+        host: betting-backend
+        port:
+          number: 3000
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+    corsPolicy:
+      allowOrigins:
+      - exact: "https://www.betting-platform.com"
+      allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+      allowHeaders:
+      - content-type
+      - authorization
+      maxAge: 24h
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: betting-frontend
+        port:
+          number: 80
