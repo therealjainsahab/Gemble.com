@@ -1,0 +1,60 @@
+name: Production Deployment
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: '**/package.json'
+    - name: Install Dependencies
+      run: npm ci
+    - name: Run Tests
+      run: npm test
+    - name: Security Audit
+      run: npm run audit:ci
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build and Push Docker Images
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Deploy to Production
+      uses: google-github-actions/deploy-cloudrun@v0.10.0
+      with:
+        service: betting-backend
+        image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:${{ github.sha }}
+        region: us-central1
+        credentials: ${{ secrets.GCP_CREDENTIALS }}
+        traffic: 100%
+        env_vars: |
+          NODE_ENV=production
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
